@@ -1,2 +1,78 @@
-const $=id=>document.getElementById(id);const money=n=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(n||0);const form=$("quoteForm");function generate(){const labor=Number($("labor").value)||0,materials=Number($("materials").value)||0,other=Number($("other").value)||0,markupPct=Number($("markup").value)||0;const subtotal=labor+materials+other,markup=subtotal*(markupPct/100),total=subtotal+markup;$("outBusiness").textContent=$("business").value||"Your Business";$("outCustomer").textContent=$("customer").value||"Customer";$("outJob").textContent=$("job").value||"Job estimate";$("outNumber").textContent="#"+($("number").value||"1001");$("outDate").textContent=new Date().toLocaleDateString();$("outScope").textContent=$("scope").value||"Scope of work to be confirmed with customer.";$("outLabor").textContent=money(labor);$("outMaterials").textContent=money(materials);$("outOther").textContent=money(other);$("outMarkup").textContent=money(markup);$("outTotal").textContent=money(total)}form.addEventListener("submit",e=>{e.preventDefault();generate();$("quoteCard").scrollIntoView({behavior:"smooth",block:"start"})});document.querySelectorAll("#quoteForm input,#quoteForm textarea").forEach(el=>el.addEventListener("input",generate));$("clearBtn").addEventListener("click",()=>{form.reset();generate()});generate();
-const foundingBtn=$("foundingBtn"),foundingModal=$("foundingModal"),closeFounding=$("closeFounding"),copyPayPal=$("copyPayPal"),copyStatus=$("copyStatus");foundingBtn?.addEventListener("click",()=>{foundingModal.hidden=false});closeFounding?.addEventListener("click",()=>{foundingModal.hidden=true});foundingModal?.addEventListener("click",e=>{if(e.target===foundingModal)foundingModal.hidden=true});document.addEventListener("keydown",e=>{if(e.key==="Escape"&&foundingModal)foundingModal.hidden=true});copyPayPal?.addEventListener("click",async()=>{try{await navigator.clipboard.writeText("XAC1003");copyStatus.textContent="Copied. Open your PayPal.Me page and send $49 USD."}catch{copyStatus.textContent="PayPal.Me name: XAC1003"}});
+const $=id=>document.getElementById(id);
+const money=n=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(n||0);
+const SUPABASE_URL="https://dogtgadyqezwizpoaxrx.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY="sb_publishable_HS9qYdWaLTjUH4J_IQJFSg_7ibKi_KE";
+const supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+const form=$("quoteForm");
+let authMode="signup";
+let currentEstimateId=null;
+
+function getEstimate(){
+  const labor=Number($("labor").value)||0,materials=Number($("materials").value)||0,other=Number($("other").value)||0,markupPct=Number($("markup").value)||0;
+  const subtotal=labor+materials+other,markup=subtotal*(markupPct/100),total=subtotal+markup;
+  return {business_name:$("business").value.trim(),customer_name:$("customer").value.trim(),job_type:$("job").value.trim(),estimate_number:$("number").value.trim()||"1001",labor,materials,other_costs:other,markup_percent:markupPct,markup_amount:markup,subtotal,total,scope:$("scope").value.trim()};
+}
+function generate(){
+  const e=getEstimate();
+  $("outBusiness").textContent=e.business_name||"Your Business"; $("outCustomer").textContent=e.customer_name||"Customer"; $("outJob").textContent=e.job_type||"Job estimate";
+  $("outNumber").textContent="#"+e.estimate_number; $("outDate").textContent=new Date().toLocaleDateString();
+  $("outScope").textContent=e.scope||"Scope of work to be confirmed with customer.";
+  $("outLabor").textContent=money(e.labor); $("outMaterials").textContent=money(e.materials); $("outOther").textContent=money(e.other_costs); $("outMarkup").textContent=money(e.markup_amount); $("outTotal").textContent=money(e.total);
+}
+function fillEstimate(e){
+  $("business").value=e.business_name||"";$("customer").value=e.customer_name||"";$("job").value=e.job_type||"";$("number").value=e.estimate_number||"1001";
+  $("labor").value=e.labor??0;$("materials").value=e.materials??0;$("other").value=e.other_costs??0;$("markup").value=e.markup_percent??0;$("scope").value=e.scope||"";
+  currentEstimateId=e.id||null;generate();$("app").scrollIntoView({behavior:"smooth"});
+}
+async function saveEstimate(){
+  const {data:{user}}=await supabase.auth.getUser();
+  if(!user){$("authIntro").textContent="Create a free account to save estimates and access them from any device.";$("authModal").hidden=false;return;}
+  const e=getEstimate(); let result;
+  if(currentEstimateId) result=await supabase.from("estimates").update(e).eq("id",currentEstimateId).eq("user_id",user.id).select().single();
+  else result=await supabase.from("estimates").insert({...e,user_id:user.id}).select().single();
+  if(result.error){alert("Could not save estimate: "+result.error.message);return;}
+  currentEstimateId=result.data.id; await loadEstimates(); alert("Estimate saved.");
+}
+async function loadEstimates(){
+  const {data:{user}}=await supabase.auth.getUser(); if(!user)return;
+  const list=$("estimateList"); list.innerHTML='<div class="empty-state">Loading estimates…</div>';
+  const {data,error}=await supabase.from("estimates").select("*").order("created_at",{ascending:false});
+  if(error){list.innerHTML='<div class="empty-state">Unable to load estimates.</div>';return;}
+  if(!data.length){list.innerHTML='<div class="empty-state">No saved estimates yet. Create your first quote above.</div>';return;}
+  list.innerHTML=data.map(e=>'<article class="estimate-row"><div><strong>'+escapeHtml(e.customer_name||"Customer")+'</strong><span>'+escapeHtml(e.job_type||"Estimate")+' · #'+escapeHtml(e.estimate_number||"1001")+'</span><small>'+new Date(e.created_at).toLocaleDateString()+' · '+money(e.total)+'</small></div><div class="row-actions"><button class="btn secondary" data-load="'+e.id+'">Edit</button><button class="btn secondary" data-delete="'+e.id+'">Delete</button></div></article>').join("");
+  list.querySelectorAll("[data-load]").forEach(b=>b.addEventListener("click",()=>{const e=data.find(x=>x.id===b.dataset.load);if(e)fillEstimate(e)}));
+  list.querySelectorAll("[data-delete]").forEach(b=>b.addEventListener("click",async()=>{if(!confirm("Delete this estimate?"))return;const {error}=await supabase.from("estimates").delete().eq("id",b.dataset.delete);if(error)alert(error.message);else{if(currentEstimateId===b.dataset.delete)currentEstimateId=null;loadEstimates()}}));
+}
+function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+async function updateAuthUI(){
+  const {data:{session}}=await supabase.auth.getSession();
+  const logged=!!session;
+  $("authBtn").hidden=logged;$("logoutBtn").hidden=!logged;$("dashboardBtn").hidden=!logged;
+  if(logged){$("dashboardBtn").textContent="My estimates";loadEstimates();}
+}
+form.addEventListener("submit",e=>{e.preventDefault();generate();$("quoteCard").scrollIntoView({behavior:"smooth",block:"start"})});
+document.querySelectorAll("#quoteForm input,#quoteForm textarea").forEach(el=>el.addEventListener("input",generate));
+$("clearBtn").addEventListener("click",()=>{form.reset();currentEstimateId=null;generate()});
+$("saveBtn").addEventListener("click",saveEstimate);
+$("dashboardBtn").addEventListener("click",()=>{const h=$("history");h.hidden=false;h.scrollIntoView({behavior:"smooth"});loadEstimates()});
+
+const authModal=$("authModal");
+$("authBtn").addEventListener("click",()=>{authModal.hidden=false});
+$("closeAuth").addEventListener("click",()=>authModal.hidden=true);
+authModal.addEventListener("click",e=>{if(e.target===authModal)authModal.hidden=true});
+$("authSwitch").addEventListener("click",()=>{authMode=authMode==="signup"?"login":"signup";$("authTitle").textContent=authMode==="signup"?"Save your estimates":"Welcome back";$("authIntro").textContent=authMode==="signup"?"Create a free account to save quotes and access them from any device.":"Log in to access your saved estimates.";$("authSubmit").textContent=authMode==="signup"?"Create account":"Log in";$("authSwitch").textContent=authMode==="signup"?"Already have an account? Log in":"Need an account? Sign up";$("authStatus").textContent=""});
+$("authForm").addEventListener("submit",async e=>{e.preventDefault();const email=$("authEmail").value.trim(),password=$("authPassword").value;let result;
+  if(authMode==="signup")result=await supabase.auth.signUp({email,password});else result=await supabase.auth.signInWithPassword({email,password});
+  if(result.error){$("authStatus").textContent=result.error.message;return;}
+  $("authStatus").textContent=authMode==="signup"&& !result.data.session?"Check your email to confirm your account.":"Logged in.";
+  if(result.data.session){authModal.hidden=true;updateAuthUI();}
+});
+$("logoutBtn").addEventListener("click",async()=>{await supabase.auth.signOut();currentEstimateId=null;$("history").hidden=true;updateAuthUI()});
+supabase.auth.onAuthStateChange(()=>updateAuthUI());
+
+const foundingBtn=$("foundingBtn"),foundingModal=$("foundingModal"),closeFounding=$("closeFounding"),copyPayPal=$("copyPayPal"),copyStatus=$("copyStatus");
+foundingBtn?.addEventListener("click",()=>foundingModal.hidden=false);closeFounding?.addEventListener("click",()=>foundingModal.hidden=true);
+foundingModal?.addEventListener("click",e=>{if(e.target===foundingModal)foundingModal.hidden=true});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(foundingModal)foundingModal.hidden=true;if(authModal)authModal.hidden=true}});
+copyPayPal?.addEventListener("click",async()=>{try{await navigator.clipboard.writeText("XAC1003");copyStatus.textContent="Copied. Open your PayPal.Me page and send $49 USD."}catch{copyStatus.textContent="PayPal.Me name: XAC1003"}});
+generate();updateAuthUI();
