@@ -65,6 +65,7 @@ const authModal=$("authModal");
 $("authBtn").addEventListener("click",()=>{authModal.hidden=false});
 $("closeAuth").addEventListener("click",()=>authModal.hidden=true);
 authModal.addEventListener("click",e=>{if(e.target===authModal)authModal.hidden=true});
+$("togglePassword").addEventListener("click",()=>{const input=$("authPassword"),button=$("togglePassword");const showing=input.type==="text";input.type=showing?"password":"text";button.textContent=showing?"Show":"Hide";button.setAttribute("aria-label",showing?"Show password":"Hide password");button.setAttribute("aria-pressed",String(!showing));input.focus()});
 $("authSwitch").addEventListener("click",()=>{authMode=authMode==="signup"?"login":"signup";$("authTitle").textContent=authMode==="signup"?"Save your estimates":"Welcome back";$("authIntro").textContent=authMode==="signup"?"Create a free account to save quotes and access them from any device.":"Log in to access your saved estimates.";$("authSubmit").textContent=authMode==="signup"?"Create account":"Log in";$("authSwitch").textContent=authMode==="signup"?"Already have an account? Log in":"Need an account? Sign up";$("authStatus").textContent=""});
 $("authForm").addEventListener("submit",async e=>{e.preventDefault();const email=$("authEmail").value.trim(),password=$("authPassword").value;let result;
   if(authMode==="signup")result=await supabaseClient.auth.signUp({email,password});else result=await supabaseClient.auth.signInWithPassword({email,password});
