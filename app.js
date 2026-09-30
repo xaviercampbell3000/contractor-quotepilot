@@ -2,7 +2,9 @@ const $=id=>document.getElementById(id);
 const money=n=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(n||0);
 const SUPABASE_URL="https://dogtgadyqezwizpoaxrx.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY="sb_publishable_HS9qYdWaLTjUH4J_IQJFSg_7ibKi_KE";
-const supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+const supabaseClient=window.supabase?.createClient?window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY):null;
+const db=()=>supabaseClient;
+function showAuthError(message){const s=$("authStatus");if(s)s.textContent=message;}
 const form=$("quoteForm");
 let authMode="signup";
 let currentEstimateId=null;
@@ -25,27 +27,30 @@ function fillEstimate(e){
   currentEstimateId=e.id||null;generate();$("app").scrollIntoView({behavior:"smooth"});
 }
 async function saveEstimate(){
-  const {data:{user}}=await supabase.auth.getUser();
+  if(!db()){showAuthError("Account services are still loading. Refresh the page and try again.");$("authModal").hidden=false;return;}
+  const {data:{user}}=await supabaseClient.auth.getUser();
   if(!user){$("authIntro").textContent="Create a free account to save estimates and access them from any device.";$("authModal").hidden=false;return;}
   const e=getEstimate(); let result;
-  if(currentEstimateId) result=await supabase.from("estimates").update(e).eq("id",currentEstimateId).eq("user_id",user.id).select().single();
-  else result=await supabase.from("estimates").insert({...e,user_id:user.id}).select().single();
+  if(currentEstimateId) result=await supabaseClient.from("estimates").update(e).eq("id",currentEstimateId).eq("user_id",user.id).select().single();
+  else result=await supabaseClient.from("estimates").insert({...e,user_id:user.id}).select().single();
   if(result.error){alert("Could not save estimate: "+result.error.message);return;}
   currentEstimateId=result.data.id; await loadEstimates(); alert("Estimate saved.");
 }
 async function loadEstimates(){
-  const {data:{user}}=await supabase.auth.getUser(); if(!user)return;
+  if(!db())return;
+  const {data:{user}}=await supabaseClient.auth.getUser(); if(!user)return;
   const list=$("estimateList"); list.innerHTML='<div class="empty-state">Loading estimates…</div>';
-  const {data,error}=await supabase.from("estimates").select("*").order("created_at",{ascending:false});
+  const {data,error}=await supabaseClient.from("estimates").select("*").order("created_at",{ascending:false});
   if(error){list.innerHTML='<div class="empty-state">Unable to load estimates.</div>';return;}
   if(!data.length){list.innerHTML='<div class="empty-state">No saved estimates yet. Create your first quote above.</div>';return;}
   list.innerHTML=data.map(e=>'<article class="estimate-row"><div><strong>'+escapeHtml(e.customer_name||"Customer")+'</strong><span>'+escapeHtml(e.job_type||"Estimate")+' · #'+escapeHtml(e.estimate_number||"1001")+'</span><small>'+new Date(e.created_at).toLocaleDateString()+' · '+money(e.total)+'</small></div><div class="row-actions"><button class="btn secondary" data-load="'+e.id+'">Edit</button><button class="btn secondary" data-delete="'+e.id+'">Delete</button></div></article>').join("");
   list.querySelectorAll("[data-load]").forEach(b=>b.addEventListener("click",()=>{const e=data.find(x=>x.id===b.dataset.load);if(e)fillEstimate(e)}));
-  list.querySelectorAll("[data-delete]").forEach(b=>b.addEventListener("click",async()=>{if(!confirm("Delete this estimate?"))return;const {error}=await supabase.from("estimates").delete().eq("id",b.dataset.delete);if(error)alert(error.message);else{if(currentEstimateId===b.dataset.delete)currentEstimateId=null;loadEstimates()}}));
+  list.querySelectorAll("[data-delete]").forEach(b=>b.addEventListener("click",async()=>{if(!confirm("Delete this estimate?"))return;const {error}=await supabaseClient.from("estimates").delete().eq("id",b.dataset.delete);if(error)alert(error.message);else{if(currentEstimateId===b.dataset.delete)currentEstimateId=null;loadEstimates()}}));
 }
 function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 async function updateAuthUI(){
-  const {data:{session}}=await supabase.auth.getSession();
+  if(!db()){$("authBtn").hidden=false;$("dashboardBtn").hidden=true;$("logoutBtn").hidden=true;return;}
+  const {data:{session}}=await supabaseClient.auth.getSession();
   const logged=!!session;
   $("authBtn").hidden=logged;$("logoutBtn").hidden=!logged;$("dashboardBtn").hidden=!logged;
   if(logged){$("dashboardBtn").textContent="My estimates";loadEstimates();}
@@ -62,13 +67,13 @@ $("closeAuth").addEventListener("click",()=>authModal.hidden=true);
 authModal.addEventListener("click",e=>{if(e.target===authModal)authModal.hidden=true});
 $("authSwitch").addEventListener("click",()=>{authMode=authMode==="signup"?"login":"signup";$("authTitle").textContent=authMode==="signup"?"Save your estimates":"Welcome back";$("authIntro").textContent=authMode==="signup"?"Create a free account to save quotes and access them from any device.":"Log in to access your saved estimates.";$("authSubmit").textContent=authMode==="signup"?"Create account":"Log in";$("authSwitch").textContent=authMode==="signup"?"Already have an account? Log in":"Need an account? Sign up";$("authStatus").textContent=""});
 $("authForm").addEventListener("submit",async e=>{e.preventDefault();const email=$("authEmail").value.trim(),password=$("authPassword").value;let result;
-  if(authMode==="signup")result=await supabase.auth.signUp({email,password});else result=await supabase.auth.signInWithPassword({email,password});
+  if(authMode==="signup")result=await supabaseClient.auth.signUp({email,password});else result=await supabaseClient.auth.signInWithPassword({email,password});
   if(result.error){$("authStatus").textContent=result.error.message;return;}
   $("authStatus").textContent=authMode==="signup"&& !result.data.session?"Check your email to confirm your account.":"Logged in.";
   if(result.data.session){authModal.hidden=true;updateAuthUI();}
 });
-$("logoutBtn").addEventListener("click",async()=>{await supabase.auth.signOut();currentEstimateId=null;$("history").hidden=true;updateAuthUI()});
-supabase.auth.onAuthStateChange(()=>updateAuthUI());
+$("logoutBtn").addEventListener("click",async()=>{await supabaseClient.auth.signOut();currentEstimateId=null;$("history").hidden=true;updateAuthUI()});
+if(db()) supabaseClient.auth.onAuthStateChange(()=>updateAuthUI());
 
 const foundingBtn=$("foundingBtn"),foundingModal=$("foundingModal"),closeFounding=$("closeFounding"),copyPayPal=$("copyPayPal"),copyStatus=$("copyStatus");
 foundingBtn?.addEventListener("click",()=>foundingModal.hidden=false);closeFounding?.addEventListener("click",()=>foundingModal.hidden=true);
