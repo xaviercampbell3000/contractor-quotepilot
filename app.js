@@ -57,7 +57,7 @@ async function updateAuthUI(){
 }
 form.addEventListener("submit",e=>{e.preventDefault();generate();$("quoteCard").scrollIntoView({behavior:"smooth",block:"start"})});
 document.querySelectorAll("#quoteForm input,#quoteForm textarea").forEach(el=>el.addEventListener("input",generate));
-$("clearBtn").addEventListener("click",()=>{form.reset();currentEstimateId=null;generate()});
+$("clearBtn").addEventListener("click",()=>{form.reset();["business","customer","job","number","labor","materials","other","markup","scope"].forEach(id=>{const el=$(id);if(el)el.value=""});currentEstimateId=null;$("outBusiness").textContent="Your Business";$("outCustomer").textContent="Customer";$("outJob").textContent="Job description";$("outNumber").textContent="#1001";$("outDate").textContent="";$("outScope").textContent="Your scope will appear here.";$("outLabor").textContent=money(0);$("outMaterials").textContent=money(0);$("outOther").textContent=money(0);$("outMarkup").textContent=money(0);$("outTotal").textContent=money(0);});
 $("saveBtn").addEventListener("click",saveEstimate);
 $("dashboardBtn").addEventListener("click",()=>{const h=$("history");h.hidden=false;h.scrollIntoView({behavior:"smooth"});loadEstimates()});
 
