@@ -49,3 +49,19 @@ drop policy if exists "estimates_delete_own" on public.estimates;
 create policy "estimates_delete_own" on public.estimates for delete to authenticated using (auth.uid() = user_id);
 
 create index if not exists estimates_user_id_created_at_idx on public.estimates(user_id, created_at desc);
+
+-- Founding Plan payment entitlement
+create table if not exists public.entitlements (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  plan text not null default 'founding',
+  status text not null default 'pending' check (status in ('pending','active','refunded','cancelled')),
+  paypal_order_id text unique,
+  paypal_capture_id text unique,
+  paid_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.entitlements enable row level security;
+drop policy if exists "entitlements_select_own" on public.entitlements;
+create policy "entitlements_select_own" on public.entitlements for select to authenticated using (auth.uid() = user_id);
+grant select on public.entitlements to authenticated;
