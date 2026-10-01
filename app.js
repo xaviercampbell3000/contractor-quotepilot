@@ -53,7 +53,7 @@ async function updateAuthUI(){
   const {data:{session}}=await supabaseClient.auth.getSession();
   const logged=!!session;
   $("authBtn").hidden=logged;$("logoutBtn").hidden=!logged;$("dashboardBtn").hidden=!logged;
-  if(logged){$("dashboardBtn").textContent="My estimates";loadEstimates();}
+  if(logged){$("dashboardBtn").textContent="My estimates";loadEstimates();updateAccessUI();}
 }
 form.addEventListener("submit",e=>{e.preventDefault();generate();$("quoteCard").scrollIntoView({behavior:"smooth",block:"start"})});
 document.querySelectorAll("#quoteForm input,#quoteForm textarea").forEach(el=>el.addEventListener("input",generate));
@@ -76,10 +76,14 @@ $("authForm").addEventListener("submit",async e=>{e.preventDefault();const email
 $("logoutBtn").addEventListener("click",async()=>{await supabaseClient.auth.signOut();currentEstimateId=null;$("history").hidden=true;updateAuthUI()});
 if(db()) supabaseClient.auth.onAuthStateChange(()=>updateAuthUI());
 
-const PAYPAL_PAYMENT_URL="https://paypal.me/XAC1003/49USD";
-const foundingBtn=$("foundingBtn"),foundingModal=$("foundingModal"),closeFounding=$("closeFounding"),copyPayPal=$("copyPayPal"),copyStatus=$("copyStatus");
-foundingBtn?.addEventListener("click",()=>foundingModal.hidden=false);closeFounding?.addEventListener("click",()=>foundingModal.hidden=true);
-foundingModal?.addEventListener("click",e=>{if(e.target===foundingModal)foundingModal.hidden=true});
+const PAYPAL_FUNCTION_URL=SUPABASE_URL+"/functions/v1/paypal";
+const foundingBtn=$("foundingBtn"),foundingModal=$("foundingModal"),closeFounding=$("closeFounding"),payPalBtn=$("payPalBtn"),paymentHelp=$("paymentHelp"),accessStatus=$("accessStatus");
+async function getAccess(){if(!db())return null;const {data:{user}}=await supabaseClient.auth.getUser();if(!user)return null;const {data,error}=await supabaseClient.from("entitlements").select("plan,status,paid_at,paypal_order_id").eq("user_id",user.id).maybeSingle();return error?null:data;}
+async function updateAccessUI(){const access=await getAccess();if(access?.status==="active"){if(paymentHelp)paymentHelp.textContent="Your Founding Plan is active.";if(accessStatus)accessStatus.textContent="✓ Founding access active";}else if(accessStatus)accessStatus.textContent="";}
+async function startPayPalCheckout(){if(!db()){showAuthError("Account services are still loading. Refresh the page and try again.");return;}const {data:{session}}=await supabaseClient.auth.getSession();if(!session){foundingModal.hidden=true;authModal.hidden=false;$("authIntro").textContent="Create or log in to your account before purchasing Founding access.";return;}payPalBtn.disabled=true;payPalBtn.textContent="Creating secure checkout…";paymentHelp.textContent="Preparing your secure PayPal order…";try{const response=await fetch(PAYPAL_FUNCTION_URL+"/create-order",{method:"POST",headers:{Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});const result=await response.json();if(!response.ok)throw new Error(result.error||"Could not create PayPal order.");if(result.approval_url){window.location.href=result.approval_url;return;}throw new Error("PayPal did not return an approval link.");}catch(error){paymentHelp.textContent=error.message;payPalBtn.disabled=false;payPalBtn.textContent="Pay $49 with PayPal";}}
+async function capturePayPalOrder(orderId){if(!db()||!orderId)return;const {data:{session}}=await supabaseClient.auth.getSession();if(!session)return;foundingModal.hidden=false;paymentHelp.textContent="Confirming your payment…";try{const response=await fetch(PAYPAL_FUNCTION_URL+"/capture-order",{method:"POST",headers:{Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({order_id:orderId})});const result=await response.json();if(!response.ok)throw new Error(result.error||"Payment could not be confirmed.");if(result.status==="active"){paymentHelp.textContent="Payment confirmed. Founding access is now active.";accessStatus.textContent="✓ Founding access active";}else paymentHelp.textContent="Payment is still being processed. Refresh in a moment.";payPalBtn.disabled=false;payPalBtn.textContent="Pay $49 with PayPal";}catch(error){paymentHelp.textContent=error.message;payPalBtn.disabled=false;payPalBtn.textContent="Pay $49 with PayPal";}}
+foundingBtn?.addEventListener("click",async()=>{foundingModal.hidden=false;await updateAccessUI()});closeFounding?.addEventListener("click",()=>foundingModal.hidden=true);foundingModal?.addEventListener("click",e=>{if(e.target===foundingModal)foundingModal.hidden=true});payPalBtn?.addEventListener("click",startPayPalCheckout);
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(foundingModal)foundingModal.hidden=true;if(authModal)authModal.hidden=true}});
-copyPayPal?.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(PAYPAL_PAYMENT_URL);copyStatus.textContent="Payment link copied."}catch{copyStatus.textContent=PAYPAL_PAYMENT_URL}});
+const paypalParams=new URLSearchParams(window.location.search);const paypalOrderId=paypalParams.get("token");const paypalCancelled=paypalParams.get("cancel");
+if(paypalOrderId){capturePayPalOrder(paypalOrderId);window.history.replaceState({},document.title,window.location.pathname+window.location.hash);}else if(paypalCancelled){foundingModal.hidden=false;paymentHelp.textContent="PayPal checkout was cancelled. No payment was recorded.";}
 generate();updateAuthUI();
