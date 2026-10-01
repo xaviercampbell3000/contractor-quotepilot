@@ -76,9 +76,10 @@ $("authForm").addEventListener("submit",async e=>{e.preventDefault();const email
 $("logoutBtn").addEventListener("click",async()=>{await supabaseClient.auth.signOut();currentEstimateId=null;$("history").hidden=true;updateAuthUI()});
 if(db()) supabaseClient.auth.onAuthStateChange(()=>updateAuthUI());
 
+const PAYPAL_PAYMENT_URL="https://paypal.me/XAC1003/49USD";
 const foundingBtn=$("foundingBtn"),foundingModal=$("foundingModal"),closeFounding=$("closeFounding"),copyPayPal=$("copyPayPal"),copyStatus=$("copyStatus");
 foundingBtn?.addEventListener("click",()=>foundingModal.hidden=false);closeFounding?.addEventListener("click",()=>foundingModal.hidden=true);
 foundingModal?.addEventListener("click",e=>{if(e.target===foundingModal)foundingModal.hidden=true});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(foundingModal)foundingModal.hidden=true;if(authModal)authModal.hidden=true}});
-copyPayPal?.addEventListener("click",async()=>{try{await navigator.clipboard.writeText("XAC1003");copyStatus.textContent="Copied. Open your PayPal.Me page and send $49 USD."}catch{copyStatus.textContent="PayPal.Me name: XAC1003"}});
+copyPayPal?.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(PAYPAL_PAYMENT_URL);copyStatus.textContent="Payment link copied."}catch{copyStatus.textContent=PAYPAL_PAYMENT_URL}});
 generate();updateAuthUI();
