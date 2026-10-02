@@ -78,10 +78,10 @@ if(db()) supabaseClient.auth.onAuthStateChange(()=>updateAuthUI());
 
 const BUSINESS_PAYPAL_PAYMENT_URL="https://www.paypal.com/ncp/payment/D6A9GAYFFR4XW";
 const foundingBtn=$("foundingBtn"),foundingModal=$("foundingModal"),closeFounding=$("closeFounding"),payPalBtn=$("payPalBtn"),paymentHelp=$("paymentHelp"),accessStatus=$("accessStatus");
-async function updateAccessUI(){if(accessStatus)accessStatus.textContent="";}
+async function updateAccessUI(){if(!accessStatus)return;accessStatus.textContent="";const {data:{user}}=await supabaseClient.auth.getUser();if(!user){accessStatus.textContent="Log in before purchasing so your Founding access can be linked to your account.";return;}const {data,error}=await supabaseClient.from("entitlements").select("status,plan,paid_at").eq("user_id",user.id).maybeSingle();if(error){accessStatus.textContent="Unable to check Founding access right now.";return;}if(data?.status==="active"){accessStatus.textContent="✓ Founding access is active on this account.";payPalBtn.disabled=true;payPalBtn.textContent="Founding access active";}else if(data?.status==="pending"){accessStatus.textContent="Payment is being verified. Refresh this window in a moment.";}}
 foundingBtn?.addEventListener("click",async()=>{foundingModal.hidden=false;await updateAccessUI()});
 closeFounding?.addEventListener("click",()=>foundingModal.hidden=true);
 foundingModal?.addEventListener("click",e=>{if(e.target===foundingModal)foundingModal.hidden=true});
-payPalBtn?.addEventListener("click",()=>{paymentHelp.textContent="Opening secure PayPal payment…";window.location.href=BUSINESS_PAYPAL_PAYMENT_URL;});
+payPalBtn?.addEventListener("click",async()=>{const {data:{user}}=await supabaseClient.auth.getUser();if(!user){foundingModal.hidden=true;authModal.hidden=false;showAuthError("Log in or create your QuotePilot account first. This lets us automatically link your $49 payment to your account.");return;}paymentHelp.textContent="Opening secure PayPal payment…";window.location.href=BUSINESS_PAYPAL_PAYMENT_URL;});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(foundingModal)foundingModal.hidden=true;if(authModal)authModal.hidden=true}});
 generate();updateAuthUI();
